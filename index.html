@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ÇağfenCraft: English Quest (Own It 2)</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Courier New', Courier, monospace; background-color: #87CEEB;}
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; text-align: center; color: white; text-shadow: 2px 2px 0 #000; display: none; }
+        h1 { margin-top: 20px; color: #55FF55; }
+        #question-box { background: rgba(0,0,0,0.8); display: inline-block; padding: 20px; border-radius: 10px; margin-top: 20px; border: 4px solid #fff; font-size: 24px; max-width: 80%; }
+        #score-board { position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.6); padding: 15px; border-radius: 5px; font-size: 20px; border: 2px solid white; }
+        #leaderboard { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.6); padding: 15px; border-radius: 5px; text-align: left; border: 2px solid white; }
+        .instructions { position: absolute; bottom: 30px; width: 100%; text-align: center; font-size: 20px; color: #ffffaa;}
+        
+        #login-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: url('https://www.transparenttextures.com/patterns/cubes.png'), #5D4037; display: flex; flex-direction: column; justify-content: center; align-items: center; pointer-events: auto; z-index: 10; }
+        .login-box { background: #E0E0E0; padding: 40px; border-radius: 10px; border: 6px solid #333; text-align: center; box-shadow: 10px 10px 0px rgba(0,0,0,0.5); }
+        .login-box h2 { margin-top: 0; color: #333; font-size: 28px; }
+        .login-box input { padding: 12px; font-size: 20px; font-family: inherit; border: 3px solid #777; width: 80%; text-align: center; margin-bottom: 15px; }
+        .login-box button { padding: 12px 25px; font-size: 22px; cursor: pointer; background: #4CAF50; color: white; border: 3px solid #2E7D32; font-family: inherit; font-weight: bold; transition: 0.2s; }
+        .login-box button:hover { background: #45a049; transform: scale(1.05); }
+    </style>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+    
+    <!-- Three.js (3D Motoru) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+<div id="login-screen">
+    <div class="login-box">
+        <h2>🏫 Çağfen Koleji'ne Hoş Geldin!</h2>
+        <p style="font-size:18px; color:#555;">Own It 2 - Unit 1 Macerası</p>
+        <input type="text" id="playerName" placeholder="Adını ve Soyadını gir..."><br>
+        <button onclick="startGame()">Oyuna Başla</button>
+    </div>
+</div>
+
+<div id="ui-layer">
+    <h1>ÇağfenCraft: English Quest</h1>
+    <div id="score-board">Skor: <span id="score">0</span></div>
+    <div id="leaderboard"><strong>🏆 Liderlik Tablosu</strong><br><ul id="lb-list" style="list-style:none; padding:0; margin:10px 0 0 0;"></ul></div>
+    <div id="question-box">Yükleniyor...</div>
+    <div class="instructions">Doğru cevabın yazdığı bloğa (Kırmızı veya Mavi) tıkla!</div>
+</div>
+
+<script>
+// ==========================================
+// 1. FIREBASE VERİTABANI BAĞLANTISI
+// ==========================================
+const firebaseConfig = {
+    apiKey: "BURAYA_KENDI_API_KEY_INI_YAZ",
+    authDomain: "proje-adi.firebaseapp.com",
+    databaseURL: "https://proje-adi-default-rtdb.firebaseio.com",
+    projectId: "proje-adi",
+    storageBucket: "proje-adi.appspot.com",
+    messagingSenderId: "123456789",
+    appId: "BURAYA_APP_ID_YAZ"
+};
+
+let db;
+try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+} catch(e) {
+    console.warn("Firebase bağlantısı yok. Oyun çevrimdışı modda çalışıyor.");
+}
+
+// ==========================================
+// 2. OWN IT 2 İNGİLİZCE SORULARI (Sayfa 2-21)
+// ==========================================
+const questions = [
+    { q: "I ____ (hang out) with my friends at the weekend.", a: "hang out", b: "am hanging out", correct: 1 },
+    { q: "Look! She ____ (watch) a documentary right now.", a: "watches", b: "is watching", correct: 2 },
+    { q: "You use ____ to listen to music.", a: "headphones", b: "a passport", correct: 1 },
+    { q: "I don't mind ____ (make) photos.", a: "to make", b: "making", correct: 2 },
+    { q: "They always ____ (read) books before bed.", a: "read", b: "are reading", correct: 1 },
+    { q: "Victor is mad ____ football!", a: "about", b: "for", correct: 1 }
+];
+
+let currentQuestion = 0;
+let score = 0;
+let playerName = "";
+
+// ==========================================
+// 3. THREE.JS İLE 3D MİNECRAFT DÜNYASI
+// ==========================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB); // Gökyüzü
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// Işıklar
+const light = new THREE.DirectionalLight(0xffffff, 1);
+light.position.set(5, 10, 7).normalize();
+scene.add(light);
+scene.add(new THREE.AmbientLight(0x555555)); 
+
+// Çimen Zemin (Minecraft Stili)
+const grassGeometry = new THREE.BoxGeometry(40, 1, 40);
+const grassMaterial = new THREE.MeshLambertMaterial({ color: 0x4CAF50 });
+const grass = new THREE.Mesh(grassGeometry, grassMaterial);
+grass.position.y = -1.5;
+scene.add(grass);
+
+// Kenar Çizgileri Fonksiyonu (Blokların etrafındaki siyah çizgiler)
+function addEdges(mesh) {
+    const edges = new THREE.EdgesGeometry(mesh.geometry);
+    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 }));
+    mesh.add(line);
+}
+addEdges(grass);
+
+// Cevap Blokları (Kırmızı ve Mavi)
+const boxGeo = new THREE.BoxGeometry(2, 2, 2);
+
+const blockA = new THREE.Mesh(boxGeo, new THREE.MeshLambertMaterial({ color: 0xff4444 }));
+blockA.position.set(-3, 1, -6);
+blockA.name = "A";
+addEdges(blockA);
+scene.add(blockA);
+
+const blockB = new THREE.Mesh(boxGeo, new THREE.MeshLambertMaterial({ color: 0x4444ff }));
+blockB.position.set(3, 1, -6);
+blockB.name = "B";
+addEdges(blockB);
+scene.add(blockB);
+
+camera.position.z = 3;
+camera.position.y = 2;
+
+// Tıklama Algılayıcı (Raycaster)
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+function startGame() {
+    const input = document.getElementById("playerName").value;
+    if(input.trim() === "") return alert("Lütfen adını gir!");
+    playerName = input;
+    document.getElementById("login-screen").style.display = "none";
+    document.getElementById("ui-layer").style.display = "block";
+    document.getElementById("ui-layer").style.pointerEvents = "auto";
+    
+    loadQuestion();
+    loadLeaderboard();
+}
+
+function loadQuestion() {
+    if(currentQuestion >= questions.length) {
+        document.getElementById("question-box").innerHTML = "🎉 Harika! Tüm soruları bitirdin!";
+        saveScore();
+        return;
+    }
+    const q = questions[currentQuestion];
+    document.getElementById("question-box").innerHTML = `
+        ${q.q}<br><br>
+        <span style="color:#ff6666; text-shadow:1px 1px 0 #000;">Sol (Kırmızı): ${q.a}</span> 
+        &nbsp;&nbsp;&nbsp;&nbsp; 
+        <span style="color:#6666ff; text-shadow:1px 1px 0 #000;">Sağ (Mavi): ${q.b}</span>
+    `;
+}
+
+// Oyuncu Bloğa Tıkladığında
+window.addEventListener('click', (event) => {
+    if(document.getElementById("login-screen").style.display !== "none") return;
+
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+
+    const intersects = raycaster.intersectObjects([blockA, blockB]);
+    
+    if (intersects.length > 0) {
+        const clickedBlock = intersects[0].object.name;
+        checkAnswer(clickedBlock === "A" ? 1 : 2);
+    }
+});
+
+function checkAnswer(selected) {
+    if(currentQuestion >= questions.length) return;
+    
+    const block = selected === 1 ? blockA : blockB;
+    // Tıklama animasyonu
+    block.scale.set(0.8, 0.8, 0.8);
+    setTimeout(() => block.scale.set(1, 1, 1), 150);
+
+    if(selected === questions[currentQuestion].correct) {
+        score += 10;
+        document.getElementById("score").innerText = score;
+        currentQuestion++;
+        loadQuestion();
+    } else {
+        alert("Oops! Yanlış cevap. Tekrar dene.");
+    }
+}
+
+// Skoru Firebase'e Kaydet
+function saveScore() {
+    if(!db) return;
+    db.ref("cagfen_leaderboard/" + playerName).set({
+        score: score,
+        time: Date.now()
+    });
+}
+
+// Liderlik Tablosunu Canlı Çek
+function loadLeaderboard() {
+    if(!db) return;
+    db.ref("cagfen_leaderboard").orderByChild("score").limitToLast(5).on("value", (snapshot) => {
+        const list = document.getElementById("lb-list");
+        list.innerHTML = "";
+        let scores = [];
+        snapshot.forEach((child) => { scores.push({name: child.key, score: child.val().score}); });
+        scores.reverse(); 
+        scores.forEach(s => {
+            list.innerHTML += `<li>⭐ ${s.name}: ${s.score} Puan</li>`;
+        });
+    });
+}
+
+// Animasyon Döngüsü
+function animate() {
+    requestAnimationFrame(animate);
+    // Bloklara nefes alma / yavaş dönme efekti
+    blockA.rotation.y += 0.005;
+    blockA.position.y = 1 + Math.sin(Date.now() * 0.002) * 0.2;
+    
+    blockB.rotation.y -= 0.005;
+    blockB.position.y = 1 + Math.cos(Date.now() * 0.002) * 0.2;
+
+    renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+});
+</script>
+</body>
+</html>
